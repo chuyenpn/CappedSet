@@ -11,7 +11,7 @@ contract CappedSet {
 
     uint256 public maxLength;
 
-    uint256 public length;
+    uint256 length;
 
     event LowestItem (
         address indexed addr,
@@ -22,12 +22,12 @@ contract CappedSet {
         maxLength = n;
     }
 
-    mapping(address => bool) public isItemInserted;
-    mapping(uint256 => address) public index2Adrress; // index => address
-    mapping(uint256 => uint256) public index2Value; // index => value
-    mapping(uint256 => uint256) public value2Index; // value => index
-    mapping(address => uint256) public address2Value; // address => value // use to get value of address
-    mapping(address => uint256) public address2Index; // address => index // use to get index of address
+    mapping(address => bool) isItemInserted;
+    mapping(uint256 => address) index2Adrress; // index => address
+    mapping(uint256 => uint256) index2Value; // index => value
+    mapping(uint256 => uint256) value2Index; // value => index
+    mapping(address => uint256) address2Value; // address => value // use to get value of address
+    mapping(address => uint256) address2Index; // address => index // use to get index of address
 
 
     function insert(address addr, uint256 value) public returns (address newLowestAddress, uint256 newLowestValue) {
@@ -51,6 +51,7 @@ contract CappedSet {
                 index2Adrress[length] = addr;
                 index2Value[length] = value;
                 value2Index[value] = length;
+                address2Value[addr] = value;
                 address2Index[addr] = length;
                 length++;
             } else {
@@ -60,7 +61,7 @@ contract CappedSet {
             return (index2Adrress[0], index2Value[0]);
         }
 
-        // if limit max length
+        // if set reaches limit max length
         _removeIndex(0);
         _insert(addr, value);
         emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
@@ -70,26 +71,28 @@ contract CappedSet {
     function update(address addr, uint256 newVal) public returns (address newLowestAddress, uint256 newLowestValue) {
       require(isItemInserted[addr] == true, "This address has not been inserted. Use function insert to insert its value first");
       remove(addr);
-      return insert(addr, newVal);
+      insert(addr, newVal);
+      emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
+      return (index2Adrress[0], index2Value[0]);
     }
 
     function remove(address addr) public returns (address newLowestAddress, uint256 newLowestValue) {
-      require(isItemInserted[addr] == true, "This address has not been inserted.");
+      require(isItemInserted[addr] == true, "This address has not been inserted");
 
       uint index = address2Index[addr];
       _removeIndex(index);
 
-      isItemInserted[addr] = false;
-      delete address2Value[addr];
-      delete address2Index[addr];
       if (length > 0) {
+        emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
         return (index2Adrress[0], index2Value[0]);
       }
+
+      emit LowestItem(address(0), 0); //emit for testing
       return (address(0), 0);
     }
 
     function getValue(address addr) public view returns (uint256) {
-      require(isItemInserted[addr] == true, "This address has not been inserted.");
+      require(isItemInserted[addr] == true, "Not found this address");
       return address2Value[addr];
     }
 
@@ -101,9 +104,13 @@ contract CappedSet {
         index = _binarySearch(value);
       }
 
-      for (uint256 i = length - 1; i > index; i--) {
-        index2Adrress[i + 1] = index2Adrress[i];
-        index2Value[i + 1] = index2Value[i];
+      for (uint256 i = length; i > index; i--) { // move elements
+        address prevAddress = index2Adrress[i - 1];
+        uint256 prevValue = index2Value[i - 1];
+        index2Adrress[i] = prevAddress;
+        index2Value[i] = prevValue;
+        value2Index[prevValue] = i;
+        address2Index[prevAddress] = i;
       }
 
       index2Adrress[index] = addr;
@@ -115,14 +122,26 @@ contract CappedSet {
     }
 
     function _removeIndex(uint256 index) private {
-      for (uint256 i = index; i < length - 1; i++) {
-        index2Adrress[i] = index2Adrress[i + 1];
-        index2Value[i] = index2Value[i + 1];
+      uint256 oldValue = index2Value[index];
+      delete value2Index[oldValue];
+
+      address oldAddress = index2Adrress[index];
+      isItemInserted[oldAddress] = false;
+      delete address2Value[oldAddress];
+      delete address2Index[oldAddress];
+
+      for (uint256 i = index; i < length - 1; i++) { // move elements
+        address nextAddress = index2Adrress[i + 1];
+        uint256 nextValue = index2Value[i + 1];
+        index2Adrress[i] = nextAddress;
+        index2Value[i] = nextValue;
+        value2Index[nextValue] = i;
+        address2Index[nextAddress] = i;
       }
       length--;
     }
 
-    function _binarySearch(uint256 element) private view returns (uint256) { 
+    function _binarySearch(uint256 element) private returns (uint256) { 
         uint256 low = 0;
         uint256 high = length - 1;
         while (low < high) {
