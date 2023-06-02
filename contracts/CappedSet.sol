@@ -13,6 +13,11 @@ contract CappedSet {
 
     uint256 public length;
 
+    event LowestItem (
+        address indexed addr,
+        uint256 indexed value
+    );
+
     constructor(uint256 n) {
         maxLength = n;
     }
@@ -36,6 +41,7 @@ contract CappedSet {
             address2Index[addr] = 0;
             address2Value[addr] = value;
             length++;
+            emit LowestItem(address(0), 0); //emit for testing
             return (address(0), 0);
         }
 
@@ -50,13 +56,14 @@ contract CappedSet {
             } else {
                 _insert(addr, value);
             }
+            emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
             return (index2Adrress[0], index2Value[0]);
         }
 
         // if limit max length
         _removeIndex(0);
         _insert(addr, value);
-
+        emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
         return (index2Adrress[0], index2Value[0]);
     }
 
