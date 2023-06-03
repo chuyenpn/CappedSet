@@ -97,8 +97,10 @@ contract CappedSet {
       require(isItemInserted[addr] == true, "This address has not been inserted. Use function insert to insert its value first");
       uint256 oldValue = address2Value[addr];
       
-      if (addr == minAddress && newVal > minValue) {
+      if (addr == minAddress && oldValue == minValue && newVal > minValue) { // update the minimum element
         address2Value[addr] = newVal;
+        uint256 index = address2Index[addr];
+        index2Value[index] = newVal;
         (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
         emit LowestItem(minAddress, minValue); //emit for testing
         emit Updated(addr, oldValue, newVal);

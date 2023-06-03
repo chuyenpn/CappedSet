@@ -1,90 +1,86 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import * as Contracts from "../typechain-types";
 import type {
   ContractTransaction,
   ContractReceipt,
   Event,
   BigNumber
 } from "ethers";
-
 import { Result } from "@ethersproject/abi";
 
+import { randomInt, randomAddress } from "./helper";
+import * as Contracts from "../typechain-types";
+
 const EVENT_CATCH_LOWEST_ITEM = 'LowestItem';
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1) + min);
-}
-
+const MAX_LENGTH = 10;
+const MAX_VALUE = 10_000;
 interface CappedSetDeploy {
   cappedSet: Contracts.CappedSet
 }
 
 describe("CappedSet", function () {
   async function deploy(): Promise<CappedSetDeploy> {
-    const n: number = 5;
+    const n: number = MAX_LENGTH;
     const CappedSetDeploy: Contracts.CappedSet__factory = await ethers.getContractFactory("CappedSet");
     const cappedSet: Contracts.CappedSet = await CappedSetDeploy.deploy(n);
-    const addressArr: SignerWithAddress[] = await ethers.getSigners();
-
     return { cappedSet };
   }
 
   describe("Insert", function () {
-    it("Should return address(0) and value 0 in the first time", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Insert first element with random value: Should return address(0) and value(0)", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const value1: number = 1;
-      const txResponse: ContractTransaction  = await deployed.cappedSet.insert(addressArr[0].address, value1);
+      const address: string = randomAddress();
+      const value: number = randomInt(1, MAX_VALUE);
+      const txResponse: ContractTransaction  = await deployed.cappedSet.insert(address, value);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
+
       if (transferEvent != undefined && transferEvent.length > 0) {
         const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         expect(result?.addr).to.equal(ethers.constants.AddressZero);
         expect(result?.value).to.equal(0);
       }
-
     });
 
-    it("Should revert if address has already been inserted", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Insert 2nd element with same address: Should revert with message: \"This address has been inserted. Use function update to update its value\"", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const value1: number = 1;
-      const txResponse: ContractTransaction  = await deployed.cappedSet.insert(addressArr[0].address, value1);
+      const address: string = randomAddress();
+      const value: number = randomInt(1, MAX_VALUE);
+      const txResponse: ContractTransaction = await deployed.cappedSet.insert(address, value);
       await txResponse.wait();
 
-      const value2: number = 2;
-      await expect(deployed.cappedSet.insert(addressArr[0].address, value2)).to.be.revertedWith("This address has been inserted. Use function update to update its value");
+      const value2: number = value + randomInt(1, MAX_VALUE);
+      await expect(deployed.cappedSet.insert(address, value2)).to.be.revertedWith("This address has been inserted. Use function update to update its value");
     });
 
-    it("Should return lowest address and lowest value", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Insert 3rd element: Should return lowest address and lowest value", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [2, 1, 1, 3, 8, 7];
-      let minValue: number = 9999;
-      let maxValue: number = 0;
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
+
+      let minValue: number = Number.MAX_SAFE_INTEGER;
       for (let i: number = 0; i < valueArr.length; i++) {
         if (valueArr[i] < minValue) {
           minValue = valueArr[i];
         }
-
-        if (valueArr[i] > maxValue) {
-          maxValue = valueArr[i];
-        }
       }
 
-      // find min addresses
+      // find multiple min addresses
       const minAddressArr: string[] = [];
       for (let i = 0; i < valueArr.length; i++) {
         if (valueArr[i] == minValue) {
-          minAddressArr.push(addressArr[i].address);
+          minAddressArr.push(addressArr[i]);
         }
       }
-      
+
       let result: Result | undefined;
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
         if (transferEvent != undefined && transferEvent.length > 0) {
@@ -96,14 +92,19 @@ describe("CappedSet", function () {
       expect(result?.value).to.equal(minValue);
     });
 
-    it("When the set gets too big, it should boot out the element with the lowest value", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Insert until capped (n = 10): Should boot out the element with the lowest value", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [3, 2, 1, 4, 5, 6, 7, 8, 9, 10];
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+
+      for (let i: number = 0; i < MAX_LENGTH; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
       
       let result: Result | undefined;
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
         if (transferEvent != undefined && transferEvent.length > 0) {
@@ -113,7 +114,9 @@ describe("CappedSet", function () {
 
       let minAddress: string = result?.addr;
 
-      const txResponse1: ContractTransaction = await deployed.cappedSet.insert(addressArr[valueArr.length].address, valueArr[valueArr.length - 1]);
+      const newAddr = randomAddress();
+      const newValue = randomInt(1, MAX_LENGTH);
+      const txResponse1: ContractTransaction = await deployed.cappedSet.insert(newAddr, newValue);
       const txReceipt1: ContractReceipt = await txResponse1.wait();
       const transferEvent1: Event[] | undefined = txReceipt1.events;
       if (transferEvent1 != undefined && transferEvent1.length > 0) {
@@ -124,41 +127,57 @@ describe("CappedSet", function () {
   });
 
   describe("Update", function () {
-    it("Should revert if address has not been inserted", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Update not existing address: Should revert with message: \"This address has not been inserted. Use function insert to insert its value first\"", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const value1: number = 1;
-      const value2: number = 2;
-      await deployed.cappedSet.insert(addressArr[0].address, value1);
-      await expect(deployed.cappedSet.update(addressArr[1].address, value2)).to.be.revertedWith("This address has not been inserted. Use function insert to insert its value first");
+      const address1: string = randomAddress();
+      let address2: string = address1;
+      while (address2 == address1) {
+        address2 = randomAddress();
+      }
+
+      const value1: number = randomInt(1, MAX_VALUE);
+      const value2: number = value1 + randomInt(1, MAX_VALUE);
+      await deployed.cappedSet.insert(address1, value1);
+      await expect(deployed.cappedSet.update(address2, value2)).to.be.revertedWith("This address has not been inserted. Use function insert to insert its value first");
     });
 
-    it("Should update the address with new value", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Update element with existing address: Should update the address with new value", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [6, 4, 5, 7, 1, 9];
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
       
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         await txResponse.wait();
       }
 
       //update
-      let indexUpdate = randomInt(0, valueArr.length - 1);
-      let addressUpdate = addressArr[indexUpdate].address;
-      let valueUpdate = valueArr[indexUpdate] + randomInt(1, 100);
+      let indexUpdate = randomInt(0, length - 1);
+      let addressUpdate = addressArr[indexUpdate];
+      let valueUpdate = valueArr[indexUpdate] + randomInt(1, MAX_LENGTH);
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       await txResponse.wait();
       const value: BigNumber = await deployed.cappedSet.getValue(addressUpdate);
       expect(value).to.equal(valueUpdate);
     });
 
-    it("Should return lowest address and lowest value after update", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Update element with existing address which is not minimum element: Update Should return lowest address and lowest value after update", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [6, 4, 5, 7, 1];
-      let minValue: number = 9999;
-      let maxValue: number = 0;
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
+
+      let minValue: number = Number.MAX_SAFE_INTEGER;
+      let maxValue: number = Number.MIN_SAFE_INTEGER;
       let maxIndex: number = 0;
       for (let i: number = 0; i < valueArr.length; i++) {
         if (valueArr[i] < minValue) {
@@ -174,20 +193,19 @@ describe("CappedSet", function () {
       const minAddressArr: string[] = [];
       for (let i = 0; i < valueArr.length; i++) {
         if (valueArr[i] == minValue) {
-          minAddressArr.push(addressArr[i].address);
+          minAddressArr.push(addressArr[i]);
         }
       }
       
       for (let i: number = 0; i < valueArr.length; i++) {
-        // console.log(addressArr[i].address, ' => ', valueArr[i]);
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         await txResponse.wait();
       }
 
-      let indexUpdate = maxIndex;
-      let addressUpdate = addressArr[indexUpdate].address;
-      // console.log('addressUpdate === ', addressUpdate)
-      const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, maxValue + 1);
+      const indexUpdate = maxIndex;
+      const valueUpdate = maxValue + randomInt(1, MAX_VALUE);
+      const addressUpdate = addressArr[indexUpdate];
+      const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
@@ -198,42 +216,115 @@ describe("CappedSet", function () {
       }
       
     });
+
+    it("Update element with existing address which is minimum element: Update Should return lowest address and lowest value after update", async function () {
+      const deployed: CappedSetDeploy = await deploy();
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
+     
+      let result: Result | undefined;
+      for (let i: number = 0; i < valueArr.length; i++) {
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
+        const txReceipt: ContractReceipt = await txResponse.wait();
+        const transferEvent: Event[] | undefined = txReceipt.events;
+        if (transferEvent != undefined && transferEvent.length > 0) {
+          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        }
+      }
+
+      const lastMinAddress: string = result?.addr;
+      const lastMinValue: number = parseInt(result?.value);
+      const valueUpdate: number = lastMinValue + randomInt(1, MAX_VALUE);
+      const txResponse: ContractTransaction = await deployed.cappedSet.update(lastMinAddress, valueUpdate);
+      const txReceipt: ContractReceipt = await txResponse.wait();
+      const transferEvent: Event[] | undefined = txReceipt.events;
+      if (transferEvent != undefined && transferEvent.length > 0) {
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+
+        // update addressArr and valueArr
+        for (let i: number = 0; i < length; i++) {
+          if (addressArr[i] == lastMinAddress) {
+            valueArr[i] = valueUpdate;
+          }
+        }
+
+        // find new min address and value
+        let minValue: number = Number.MAX_SAFE_INTEGER;
+        for (let i: number = 0; i < valueArr.length; i++) {
+          if (valueArr[i] < minValue) {
+            minValue = valueArr[i];
+          }
+        }
+
+        // find multiple min addresses
+        const minAddressArr: string[] = [];
+        for (let i = 0; i < valueArr.length; i++) {
+          if (valueArr[i] == minValue) {
+            minAddressArr.push(addressArr[i]);
+          }
+        }
+
+        expect(minAddressArr).to.contains(result?.addr);
+        expect(result?.value).to.equal(minValue);
+      }
+      
+    });
   });
 
   describe("Delete", function () {
-    it("Should revert if address has not been inserted", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Delete not existing address: Should revert with message: \"This address has not been inserted\"", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const value1: number = 1;
-      const value2: number = 2;
-      await deployed.cappedSet.insert(addressArr[0].address, value1);
-      await expect(deployed.cappedSet.remove(addressArr[1].address)).to.be.revertedWith("This address has not been inserted");
+      const address1: string = randomAddress();
+      let address2: string = address1;
+      while (address2 == address1) {
+        address2 = randomAddress();
+      }
+      const value1: number = randomInt(1, MAX_VALUE);
+      const value2: number = value1 + randomInt(1, MAX_VALUE);
+      await deployed.cappedSet.insert(address1, value1);
+      await expect(deployed.cappedSet.remove(address2)).to.be.revertedWith("This address has not been inserted");
     });
 
-    it("Should delete the address", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Delete element with existing address: Should delete the address (call getValue function will revert with a message)", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [6, 4, 5, 7, 1, 9];
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
       
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         await txResponse.wait();
       }
 
       //update
-      let indexDelete = randomInt(0, valueArr.length - 1);
-      let addressDelete = addressArr[indexDelete].address;
+      let indexDelete = randomInt(0, length - 1);
+      let addressDelete = addressArr[indexDelete];
       const txResponse: ContractTransaction = await deployed.cappedSet.remove(addressDelete);
       await txResponse.wait();
       await expect(deployed.cappedSet.getValue(addressDelete)).to.be.revertedWith("Not found this address");
     });
 
-    it("Should return lowest address and lowest value after delete", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Delete element with existing address: Should return lowest address and lowest value after delete", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [6, 4, 5, 7, 1];
-      let minValue: number = 9999;
-      let maxValue: number = 0;
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
+
+      let minValue: number = Number.MAX_SAFE_INTEGER;
+      let maxValue: number = Number.MIN_SAFE_INTEGER;
       let maxIndex: number = 0;
       for (let i: number = 0; i < valueArr.length; i++) {
         if (valueArr[i] < minValue) {
@@ -249,25 +340,22 @@ describe("CappedSet", function () {
       const minAddressArr: string[] = [];
       for (let i = 0; i < valueArr.length; i++) {
         if (valueArr[i] == minValue) {
-          minAddressArr.push(addressArr[i].address);
+          minAddressArr.push(addressArr[i]);
         }
       }
       
       for (let i: number = 0; i < valueArr.length; i++) {
-        // console.log(addressArr[i].address, ' => ', valueArr[i]);
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         await txResponse.wait();
       }
 
       let indexDelete = maxIndex;
-      let addressDelete = addressArr[indexDelete].address;
-      // console.log('addressUpdate === ', addressUpdate)
+      let addressDelete = addressArr[indexDelete];
       const txResponse: ContractTransaction = await deployed.cappedSet.remove(addressDelete);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
         const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
-        // console.log('result === ', result)
         expect(minAddressArr).to.contains(result?.addr);
         expect(result?.value).to.equal(minValue);
       }
@@ -277,27 +365,36 @@ describe("CappedSet", function () {
 
   describe("Get Value", function () {
 
-    it("Should revert if address not exist", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Get not existing address: Should revert if address not exist", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const value1: number = 1;
-      await deployed.cappedSet.insert(addressArr[0].address, value1);
-      await expect(deployed.cappedSet.getValue(addressArr[1].address)).to.be.revertedWith("Not found this address");
+      const address1: string = randomAddress();
+      let address2: string = address1;
+      while (address2 == address1) {
+        address2 = randomAddress();
+      }
+      const value: number = randomInt(1, MAX_VALUE);
+      await deployed.cappedSet.insert(address1, value);
+      await expect(deployed.cappedSet.getValue(address2)).to.be.revertedWith("Not found this address");
     });
 
-    it("Retrieves the value for the element with address addr", async function () {
-      const addressArr: SignerWithAddress[] = await ethers.getSigners();
+    it("Get  element with existing address: Retrieves the value for the element with address addr", async function () {
       const deployed: CappedSetDeploy = await deploy();
-      const valueArr: number[] = [6, 4, 5, 7, 1];
+      const addressArr: string[] = [];
+      const valueArr: number[] = [];
+      const length = randomInt(3, MAX_LENGTH);
+      for (let i: number = 0; i < length; i++) {
+        addressArr[i] = randomAddress();
+        valueArr[i] = randomInt(1, MAX_VALUE);
+      }
       
       for (let i: number = 0; i < valueArr.length; i++) {
         // console.log(addressArr[i].address, ' => ', valueArr[i]);
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
         await txResponse.wait();
       }
 
       for (let i: number = 0; i < valueArr.length; i++) {
-        const value = await deployed.cappedSet.getValue(addressArr[i].address);
+        const value = await deployed.cappedSet.getValue(addressArr[i]);
         expect(value).to.equal(valueArr[i]);
       }
       
