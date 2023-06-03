@@ -11,24 +11,41 @@ contract CappedSet {
 
     uint256 public maxLength;
 
-    uint256 length;
+    uint256 private length;
 
     event LowestItem (
         address indexed addr,
         uint256 indexed value
     );
 
+    event Inserted (
+      address indexed addr,
+      uint256 indexed value
+    );
+
+    event Updated (
+      address indexed addr,
+      uint256 oldValue,
+      uint256 newValue
+    );
+
+    event Removed (
+      address indexed addr
+    );
+
     constructor(uint256 n) {
-        maxLength = n;
+      require(n > 0, "max length of set must greater than 0");
+      maxLength = n;
     }
 
-    mapping(address => bool) isItemInserted;
-    mapping(uint256 => address) index2Adrress; // index => address
-    mapping(uint256 => uint256) index2Value; // index => value
-    mapping(uint256 => uint256) value2Index; // value => index
-    mapping(address => uint256) address2Value; // address => value // use to get value of address
-    mapping(address => uint256) address2Index; // address => index // use to get index of address
-
+    mapping(address => bool) private isItemInserted;
+    mapping(uint256 => address) private index2Adrress; // index => address
+    mapping(uint256 => uint256) private index2Value; // index => value
+    mapping(address => uint256) private address2Value; // address => value // use to get value of address
+    mapping(address => uint256) private address2Index; // address => index // use to get index of address (delete)
+    address private minAddress;
+    uint256 private minValue;
+    uint256 private minIndex;
 
     function insert(address addr, uint256 value) public returns (address newLowestAddress, uint256 newLowestValue) {
         require(isItemInserted[addr] == false, "This address has been inserted. Use function update to update its value");
@@ -37,58 +54,83 @@ contract CappedSet {
         if (length == 0) {
             index2Adrress[0] = addr;
             index2Value[0] = value;
-            value2Index[value] = 0;
-            address2Index[addr] = 0;
             address2Value[addr] = value;
+            address2Index[addr] = 0;
+            minAddress = addr;
+            minValue = value;
+            minIndex = 0;
             length++;
             emit LowestItem(address(0), 0); //emit for testing
+            emit Inserted(addr, value);
             return (address(0), 0);
         }
 
         if (length < maxLength) {
-            uint256 maxValue = index2Value[length - 1];
-            if (value >= maxValue) { //insert to the top, index = length
-                index2Adrress[length] = addr;
-                index2Value[length] = value;
-                value2Index[value] = length;
-                address2Value[addr] = value;
-                address2Index[addr] = length;
-                length++;
-            } else {
-                _insert(addr, value);
+            if (value < minValue) {
+                minAddress = addr;
+                minValue = value;
+                minIndex = length;
             }
-            emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
-            return (index2Adrress[0], index2Value[0]);
+            index2Adrress[length] = addr;
+            index2Value[length] = value;
+            address2Value[addr] = value;
+            address2Index[addr] = length;
+            length++;
+            emit LowestItem(minAddress, minValue); //emit for testing
+            emit Inserted(addr, value);
+            return (minAddress, minValue);
         }
 
-        // if set reaches limit max length
-        _removeIndex(0);
-        _insert(addr, value);
-        emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
-        return (index2Adrress[0], index2Value[0]);
+        _removeIndex(minIndex);
+        index2Adrress[length] = addr;
+        index2Value[length] = value;
+        address2Value[addr] = value;
+        address2Index[addr] = length;
+        length++;
+        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
+        emit LowestItem(minAddress, minValue); //emit for testing
+        emit Inserted(addr, value);
+        return (minAddress, minValue);
     }
 
     function update(address addr, uint256 newVal) public returns (address newLowestAddress, uint256 newLowestValue) {
       require(isItemInserted[addr] == true, "This address has not been inserted. Use function insert to insert its value first");
-      remove(addr);
-      insert(addr, newVal);
-      emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
-      return (index2Adrress[0], index2Value[0]);
+      uint256 oldValue = address2Value[addr];
+      
+      if (addr == minAddress && newVal > minValue) {
+        address2Value[addr] = newVal;
+        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
+        emit LowestItem(minAddress, minValue); //emit for testing
+        emit Updated(addr, oldValue, newVal);
+        return (minAddress, minValue);
+      }
+
+      if (newVal < minValue) {
+        minAddress = addr;
+        minValue = newVal;
+        minIndex = address2Index[addr];
+      }
+
+      address2Value[addr] = newVal;
+
+      emit LowestItem(minAddress, minValue); //emit for testing
+      emit Updated(addr, oldValue, newVal);
+      return (minAddress, minValue);
     }
 
     function remove(address addr) public returns (address newLowestAddress, uint256 newLowestValue) {
       require(isItemInserted[addr] == true, "This address has not been inserted");
-
+      
       uint index = address2Index[addr];
       _removeIndex(index);
 
-      if (length > 0) {
-        emit LowestItem(index2Adrress[0], index2Value[0]); //emit for testing
-        return (index2Adrress[0], index2Value[0]);
+      if (addr == minAddress) { // if the address is minimum, then find new min value
+        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
       }
 
-      emit LowestItem(address(0), 0); //emit for testing
-      return (address(0), 0);
+      emit LowestItem(minAddress, minValue); //emit for testing
+      emit Removed(addr);
+      return (minAddress, minValue);
     }
 
     function getValue(address addr) public view returns (uint256) {
@@ -96,63 +138,46 @@ contract CappedSet {
       return address2Value[addr];
     }
 
-    function _insert(address addr, uint256 value) private {
-      uint256 index = 0;
-      if (value2Index[value] > 0 || value == index2Value[0]) { // if value exist => index
-        index = value2Index[value];
-      } else { // if not, search suitable index by binarySearch
-        index = _binarySearch(value);
-      }
-
-      for (uint256 i = length; i > index; i--) { // move elements
-        address prevAddress = index2Adrress[i - 1];
-        uint256 prevValue = index2Value[i - 1];
-        index2Adrress[i] = prevAddress;
-        index2Value[i] = prevValue;
-        value2Index[prevValue] = i;
-        address2Index[prevAddress] = i;
-      }
-
-      index2Adrress[index] = addr;
-      index2Value[index] = value;
-      value2Index[value] = index;
-      address2Index[addr] = index;
-      address2Value[addr] = value;
-      length++;
-    }
-
     function _removeIndex(uint256 index) private {
-      uint256 oldValue = index2Value[index];
-      delete value2Index[oldValue];
-
-      address oldAddress = index2Adrress[index];
-      isItemInserted[oldAddress] = false;
-      delete address2Value[oldAddress];
-      delete address2Index[oldAddress];
+      address addr = index2Adrress[index];
+      // delete addr
+      delete address2Value[addr];
+      delete address2Index[addr];
+      isItemInserted[addr] = false;
 
       for (uint256 i = index; i < length - 1; i++) { // move elements
         address nextAddress = index2Adrress[i + 1];
         uint256 nextValue = index2Value[i + 1];
         index2Adrress[i] = nextAddress;
         index2Value[i] = nextValue;
-        value2Index[nextValue] = i;
         address2Index[nextAddress] = i;
       }
+
       length--;
     }
 
-    function _binarySearch(uint256 element) private returns (uint256) { 
-        uint256 low = 0;
-        uint256 high = length - 1;
-        while (low < high) {
-            uint256 mid = (low + high) / 2;
-            if (index2Value[mid] < element) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
+    function _findMinAddressAndMinValue() private view returns (address, uint256, uint256) { // return (minAddress, minValue, minIndex)
+        if (length == 0) {
+          return (address(0), 0, 0);
         }
-        return low;
+
+        if (length == 1) {
+          return (index2Adrress[0], index2Value[0], 0);
+        }
+        
+        address tempMinAddress = index2Adrress[0];
+        uint256 tempMinValue = index2Value[0];
+        uint256 tempMinIndex = 0;
+
+        for (uint256 i = 1; i < length; i++) {
+          if (index2Value[i] < tempMinValue) {
+            tempMinAddress = index2Adrress[i];
+            tempMinValue = index2Value[i];
+            tempMinIndex = i;
+          }
+        }
+
+        return (tempMinAddress, tempMinValue, tempMinIndex);
     }
 
 }

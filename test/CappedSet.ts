@@ -11,6 +11,8 @@ import type {
 
 import { Result } from "@ethersproject/abi";
 
+const EVENT_CATCH_LOWEST_ITEM = 'LowestItem';
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }
@@ -37,8 +39,8 @@ describe("CappedSet", function () {
       const txResponse: ContractTransaction  = await deployed.cappedSet.insert(addressArr[0].address, value1);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
-      if (transferEvent != undefined) {
-        const result: Result | undefined = transferEvent[0].args;
+      if (transferEvent != undefined && transferEvent.length > 0) {
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         expect(result?.addr).to.equal(ethers.constants.AddressZero);
         expect(result?.value).to.equal(0);
       }
@@ -85,8 +87,8 @@ describe("CappedSet", function () {
         const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
-        if (transferEvent != undefined) {
-          result = transferEvent[0].args;
+        if (transferEvent != undefined && transferEvent.length > 0) {
+          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         }
       }
       
@@ -104,8 +106,8 @@ describe("CappedSet", function () {
         const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i].address, valueArr[i]);
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
-        if (transferEvent != undefined) {
-          result = transferEvent[0].args;
+        if (transferEvent != undefined && transferEvent.length > 0) {
+          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         }
       }
 
@@ -114,8 +116,8 @@ describe("CappedSet", function () {
       const txResponse1: ContractTransaction = await deployed.cappedSet.insert(addressArr[valueArr.length].address, valueArr[valueArr.length - 1]);
       const txReceipt1: ContractReceipt = await txResponse1.wait();
       const transferEvent1: Event[] | undefined = txReceipt1.events;
-      if (transferEvent1 != undefined) {
-        const result: Result | undefined = transferEvent1[0].args;
+      if (transferEvent1 != undefined && transferEvent1.length > 0) {
+        const result: Result | undefined = transferEvent1.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         expect(result?.addr).to.not.equal(minAddress);
       }
     });
@@ -188,8 +190,8 @@ describe("CappedSet", function () {
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, maxValue + 1);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
-      if (transferEvent != undefined) {
-        const result: Result | undefined = transferEvent[0].args;
+      if (transferEvent != undefined && transferEvent.length > 0) {
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         // console.log('result === ', result)
         expect(minAddressArr).to.contains(result?.addr);
         expect(result?.value).to.equal(minValue);
@@ -263,8 +265,8 @@ describe("CappedSet", function () {
       const txResponse: ContractTransaction = await deployed.cappedSet.remove(addressDelete);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
-      if (transferEvent != undefined) {
-        const result: Result | undefined = transferEvent[0].args;
+      if (transferEvent != undefined && transferEvent.length > 0) {
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
         // console.log('result === ', result)
         expect(minAddressArr).to.contains(result?.addr);
         expect(result?.value).to.equal(minValue);
@@ -279,7 +281,6 @@ describe("CappedSet", function () {
       const addressArr: SignerWithAddress[] = await ethers.getSigners();
       const deployed: CappedSetDeploy = await deploy();
       const value1: number = 1;
-      const value2: number = 2;
       await deployed.cappedSet.insert(addressArr[0].address, value1);
       await expect(deployed.cappedSet.getValue(addressArr[1].address)).to.be.revertedWith("Not found this address");
     });
