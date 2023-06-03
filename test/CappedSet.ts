@@ -36,7 +36,7 @@ describe("CappedSet", function () {
       const transferEvent: Event[] | undefined = txReceipt.events;
 
       if (transferEvent != undefined && transferEvent.length > 0) {
-        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
         expect(result?.addr).to.equal(ethers.constants.AddressZero);
         expect(result?.value).to.equal(0);
       }
@@ -84,7 +84,7 @@ describe("CappedSet", function () {
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
         if (transferEvent != undefined && transferEvent.length > 0) {
-          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
         }
       }
       
@@ -101,28 +101,45 @@ describe("CappedSet", function () {
         addressArr[i] = randomAddress();
         valueArr[i] = randomInt(1, MAX_VALUE);
       }
-      
-      let result: Result | undefined;
+
+      let minValue: number = Number.MAX_SAFE_INTEGER;
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
-        const txReceipt: ContractReceipt = await txResponse.wait();
-        const transferEvent: Event[] | undefined = txReceipt.events;
-        if (transferEvent != undefined && transferEvent.length > 0) {
-          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        if (valueArr[i] < minValue) {
+          minValue = valueArr[i];
         }
       }
 
-      let minAddress: string = result?.addr;
-
-      const newAddr = randomAddress();
-      const newValue = randomInt(1, MAX_LENGTH);
-      const txResponse1: ContractTransaction = await deployed.cappedSet.insert(newAddr, newValue);
-      const txReceipt1: ContractReceipt = await txResponse1.wait();
-      const transferEvent1: Event[] | undefined = txReceipt1.events;
-      if (transferEvent1 != undefined && transferEvent1.length > 0) {
-        const result: Result | undefined = transferEvent1.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
-        expect(result?.addr).to.not.equal(minAddress);
+      // find multiple min addresses
+      const minAddressArr: string[] = [];
+      for (let i = 0; i < valueArr.length; i++) {
+        if (valueArr[i] == minValue) {
+          minAddressArr.push(addressArr[i]);
+        }
       }
+      
+      for (let i: number = 0; i < valueArr.length; i++) {
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
+        await txResponse.wait();
+      }
+
+      const newAddr: string = randomAddress();
+      const newValue: number = randomInt(1, MAX_LENGTH);
+      const txResponse1: ContractTransaction = await deployed.cappedSet.insert(newAddr, newValue);
+      await txResponse1.wait();
+
+      // Check one and only one of minAddressArr is deleted
+      const isDeleted: number[] = [];
+      for (let i = 0; i < minAddressArr.length; i++) {
+        try {
+          await deployed.cappedSet.getValue(minAddressArr[i]);
+        } catch(e: any) {
+          if(e.reason == "Not found this address") {
+            isDeleted.push(i);
+          }
+        }
+      }
+
+      expect(isDeleted.length).to.equal(1);
     });
   });
 
@@ -157,16 +174,16 @@ describe("CappedSet", function () {
       }
 
       //update
-      let indexUpdate = randomInt(0, length - 1);
-      let addressUpdate = addressArr[indexUpdate];
-      let valueUpdate = valueArr[indexUpdate] + randomInt(1, MAX_LENGTH);
+      const indexUpdate: number = randomInt(0, length - 1);
+      const addressUpdate: string = addressArr[indexUpdate];
+      const valueUpdate: number = valueArr[indexUpdate] + randomInt(1, MAX_LENGTH);
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       await txResponse.wait();
       const value: BigNumber = await deployed.cappedSet.getValue(addressUpdate);
       expect(value).to.equal(valueUpdate);
     });
 
-    it("Update element with existing address which is not minimum element: Update Should return lowest address and lowest value after update", async function () {
+    it("Update element with existing address which is not minimum element: Should return lowest address and lowest value after update", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -202,14 +219,14 @@ describe("CappedSet", function () {
         await txResponse.wait();
       }
 
-      const indexUpdate = maxIndex;
-      const valueUpdate = maxValue + randomInt(1, MAX_VALUE);
-      const addressUpdate = addressArr[indexUpdate];
+      const indexUpdate: number = maxIndex;
+      const valueUpdate: number = maxValue + randomInt(1, MAX_VALUE);
+      const addressUpdate: string = addressArr[indexUpdate];
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
-        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
         // console.log('result === ', result)
         expect(minAddressArr).to.contains(result?.addr);
         expect(result?.value).to.equal(minValue);
@@ -217,7 +234,7 @@ describe("CappedSet", function () {
       
     });
 
-    it("Update element with existing address which is minimum element: Update Should return lowest address and lowest value after update", async function () {
+    it("Update element with existing address which is minimum element: Should return lowest address and lowest value after update", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -233,7 +250,7 @@ describe("CappedSet", function () {
         const txReceipt: ContractReceipt = await txResponse.wait();
         const transferEvent: Event[] | undefined = txReceipt.events;
         if (transferEvent != undefined && transferEvent.length > 0) {
-          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
         }
       }
 
@@ -244,7 +261,7 @@ describe("CappedSet", function () {
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
-        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
 
         // update addressArr and valueArr
         for (let i: number = 0; i < length; i++) {
@@ -285,7 +302,6 @@ describe("CappedSet", function () {
         address2 = randomAddress();
       }
       const value1: number = randomInt(1, MAX_VALUE);
-      const value2: number = value1 + randomInt(1, MAX_VALUE);
       await deployed.cappedSet.insert(address1, value1);
       await expect(deployed.cappedSet.remove(address2)).to.be.revertedWith("This address has not been inserted");
     });
@@ -306,8 +322,8 @@ describe("CappedSet", function () {
       }
 
       //update
-      let indexDelete = randomInt(0, length - 1);
-      let addressDelete = addressArr[indexDelete];
+      const indexDelete: number = randomInt(0, length - 1);
+      const addressDelete: string = addressArr[indexDelete];
       const txResponse: ContractTransaction = await deployed.cappedSet.remove(addressDelete);
       await txResponse.wait();
       await expect(deployed.cappedSet.getValue(addressDelete)).to.be.revertedWith("Not found this address");
@@ -349,13 +365,13 @@ describe("CappedSet", function () {
         await txResponse.wait();
       }
 
-      let indexDelete = maxIndex;
-      let addressDelete = addressArr[indexDelete];
+      const indexDelete: number = maxIndex;
+      const addressDelete: string = addressArr[indexDelete];
       const txResponse: ContractTransaction = await deployed.cappedSet.remove(addressDelete);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
-        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM )?.args;
+        const result: Result | undefined = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
         expect(minAddressArr).to.contains(result?.addr);
         expect(result?.value).to.equal(minValue);
       }
@@ -365,7 +381,7 @@ describe("CappedSet", function () {
 
   describe("Get Value", function () {
 
-    it("Get not existing address: Should revert if address not exist", async function () {
+    it("Get not existing address: Should revert with message: \"Not found this address\"", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const address1: string = randomAddress();
       let address2: string = address1;

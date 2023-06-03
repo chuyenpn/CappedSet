@@ -4,7 +4,7 @@ import "@nomicfoundation/hardhat-toolbox";
 require('dotenv').config();
 
 const BSC_TESTNET_PROVIDER: string = process.env.BSC_TESTNET_PROVIDER || "https://data-seed-prebsc-1-s3.binance.org:8545/";
-const MNEMONIC: string | undefined = process.env.MNEMONIC;
+const MNEMONIC: string | undefined = process.env.MNEMONIC || "";
 
 const config: HardhatUserConfig = {
   solidity: {
