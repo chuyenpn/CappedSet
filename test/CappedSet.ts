@@ -12,8 +12,9 @@ import { randomInt, randomAddress } from "./helper";
 import * as Contracts from "../typechain-types";
 
 const EVENT_CATCH_LOWEST_ITEM = 'LowestItem';
-const MAX_LENGTH = 10;
+const MAX_LENGTH = 1000;
 const MAX_VALUE = 10_000;
+const MIN_VALUE = 1;
 interface CappedSetDeploy {
   cappedSet: Contracts.CappedSet
 }
@@ -30,7 +31,7 @@ describe("CappedSet", function () {
     it("Insert first element with random value: Should return address(0) and value(0)", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const address: string = randomAddress();
-      const value: number = randomInt(1, MAX_VALUE);
+      const value: number = randomInt(MIN_VALUE, MAX_VALUE);
       const txResponse: ContractTransaction  = await deployed.cappedSet.insert(address, value);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
@@ -45,11 +46,11 @@ describe("CappedSet", function () {
     it("Insert 2nd element with same address: Should revert with message: \"This address has been inserted. Use function update to update its value\"", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const address: string = randomAddress();
-      const value: number = randomInt(1, MAX_VALUE);
+      const value: number = randomInt(MIN_VALUE, MAX_VALUE);
       const txResponse: ContractTransaction = await deployed.cappedSet.insert(address, value);
       await txResponse.wait();
 
-      const value2: number = value + randomInt(1, MAX_VALUE);
+      const value2: number = value + randomInt(MIN_VALUE, MAX_VALUE);
       await expect(deployed.cappedSet.insert(address, value2)).to.be.revertedWith("This address has been inserted. Use function update to update its value");
     });
 
@@ -60,7 +61,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
 
       let minValue: number = Number.MAX_SAFE_INTEGER;
@@ -92,14 +93,14 @@ describe("CappedSet", function () {
       expect(result?.value).to.equal(minValue);
     });
 
-    it("Insert until capped (n = 10): Should boot out the element with the lowest value", async function () {
+    it("Insert until capped (n): Should boot out the element with the lowest value", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
 
       for (let i: number = 0; i < MAX_LENGTH; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
 
       let minValue: number = Number.MAX_SAFE_INTEGER;
@@ -123,9 +124,9 @@ describe("CappedSet", function () {
       }
 
       const newAddr: string = randomAddress();
-      const newValue: number = randomInt(1, MAX_LENGTH);
-      const txResponse1: ContractTransaction = await deployed.cappedSet.insert(newAddr, newValue);
-      await txResponse1.wait();
+      const newValue: number = randomInt(MIN_VALUE, MAX_VALUE);
+      const txResponse2: ContractTransaction = await deployed.cappedSet.insert(newAddr, newValue);
+      await txResponse2.wait();
 
       // Check one and only one of minAddressArr is deleted
       const isDeleted: number[] = [];
@@ -152,8 +153,8 @@ describe("CappedSet", function () {
         address2 = randomAddress();
       }
 
-      const value1: number = randomInt(1, MAX_VALUE);
-      const value2: number = value1 + randomInt(1, MAX_VALUE);
+      const value1: number = randomInt(MIN_VALUE, MAX_VALUE);
+      const value2: number = value1 + randomInt(MIN_VALUE, MAX_VALUE);
       await deployed.cappedSet.insert(address1, value1);
       await expect(deployed.cappedSet.update(address2, value2)).to.be.revertedWith("This address has not been inserted. Use function insert to insert its value first");
     });
@@ -165,7 +166,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
       
       for (let i: number = 0; i < valueArr.length; i++) {
@@ -176,7 +177,7 @@ describe("CappedSet", function () {
       //update
       const indexUpdate: number = randomInt(0, length - 1);
       const addressUpdate: string = addressArr[indexUpdate];
-      const valueUpdate: number = valueArr[indexUpdate] + randomInt(1, MAX_LENGTH);
+      const valueUpdate: number = valueArr[indexUpdate] + randomInt(MIN_VALUE, MAX_VALUE);
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       await txResponse.wait();
       const value: BigNumber = await deployed.cappedSet.getValue(addressUpdate);
@@ -190,7 +191,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
 
       let minValue: number = Number.MAX_SAFE_INTEGER;
@@ -220,7 +221,7 @@ describe("CappedSet", function () {
       }
 
       const indexUpdate: number = maxIndex;
-      const valueUpdate: number = maxValue + randomInt(1, MAX_VALUE);
+      const valueUpdate: number = maxValue + randomInt(MIN_VALUE, MAX_VALUE);
       const addressUpdate: string = addressArr[indexUpdate];
       const txResponse: ContractTransaction = await deployed.cappedSet.update(addressUpdate, valueUpdate);
       const txReceipt: ContractReceipt = await txResponse.wait();
@@ -241,23 +242,35 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
-     
-      let result: Result | undefined;
+
+      let minValue: number = Number.MAX_SAFE_INTEGER;
       for (let i: number = 0; i < valueArr.length; i++) {
-        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
-        const txReceipt: ContractReceipt = await txResponse.wait();
-        const transferEvent: Event[] | undefined = txReceipt.events;
-        if (transferEvent != undefined && transferEvent.length > 0) {
-          result = transferEvent.find((t) => t.event == EVENT_CATCH_LOWEST_ITEM)?.args;
+        if (valueArr[i] < minValue) {
+          minValue = valueArr[i];
         }
       }
 
-      const lastMinAddress: string = result?.addr;
-      const lastMinValue: number = parseInt(result?.value);
-      const valueUpdate: number = lastMinValue + randomInt(1, MAX_VALUE);
-      const txResponse: ContractTransaction = await deployed.cappedSet.update(lastMinAddress, valueUpdate);
+      const minAddressArr: string[] = [];
+      const indexOfMinAddressArr: number[] = [];
+      for (let i = 0; i < valueArr.length; i++) {
+        if (valueArr[i] == minValue) {
+          minAddressArr.push(addressArr[i]);
+          indexOfMinAddressArr.push(i);
+        }
+      }
+     
+      for (let i: number = 0; i < valueArr.length; i++) {
+        const txResponse: ContractTransaction = await deployed.cappedSet.insert(addressArr[i], valueArr[i]);
+        await txResponse.wait();
+      }
+
+      const randomIndex = randomInt(0, minAddressArr.length - 1);
+      const minAddresUpdate: string = minAddressArr[randomIndex];
+      const valueUpdate: number = minValue + randomInt(MIN_VALUE, MAX_VALUE);
+
+      const txResponse: ContractTransaction = await deployed.cappedSet.update(minAddresUpdate, valueUpdate);
       const txReceipt: ContractReceipt = await txResponse.wait();
       const transferEvent: Event[] | undefined = txReceipt.events;
       if (transferEvent != undefined && transferEvent.length > 0) {
@@ -265,7 +278,7 @@ describe("CappedSet", function () {
 
         // update addressArr and valueArr
         for (let i: number = 0; i < length; i++) {
-          if (addressArr[i] == lastMinAddress) {
+          if (i == indexOfMinAddressArr[randomIndex]) {
             valueArr[i] = valueUpdate;
           }
         }
@@ -301,7 +314,7 @@ describe("CappedSet", function () {
       while (address2 == address1) {
         address2 = randomAddress();
       }
-      const value1: number = randomInt(1, MAX_VALUE);
+      const value1: number = randomInt(MIN_VALUE, MAX_VALUE);
       await deployed.cappedSet.insert(address1, value1);
       await expect(deployed.cappedSet.remove(address2)).to.be.revertedWith("This address has not been inserted");
     });
@@ -313,7 +326,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
       
       for (let i: number = 0; i < valueArr.length; i++) {
@@ -336,7 +349,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
 
       let minValue: number = Number.MAX_SAFE_INTEGER;
@@ -388,7 +401,7 @@ describe("CappedSet", function () {
       while (address2 == address1) {
         address2 = randomAddress();
       }
-      const value: number = randomInt(1, MAX_VALUE);
+      const value: number = randomInt(MIN_VALUE, MAX_VALUE);
       await deployed.cappedSet.insert(address1, value);
       await expect(deployed.cappedSet.getValue(address2)).to.be.revertedWith("Not found this address");
     });
@@ -400,7 +413,7 @@ describe("CappedSet", function () {
       const length = randomInt(3, MAX_LENGTH);
       for (let i: number = 0; i < length; i++) {
         addressArr[i] = randomAddress();
-        valueArr[i] = randomInt(1, MAX_VALUE);
+        valueArr[i] = randomInt(MIN_VALUE, MAX_VALUE);
       }
       
       for (let i: number = 0; i < valueArr.length; i++) {

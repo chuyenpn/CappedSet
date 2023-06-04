@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.9;
 
+import "./BokkyPooBahsRedBlackTreeLibrary.sol";
+
 /**
  * @title Storage
  * @dev Store & retrieve value in a variable
@@ -9,8 +11,12 @@ pragma solidity ^0.8.9;
  */
 contract CappedSet {
 
-    uint256 public maxLength;
+    using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
 
+    BokkyPooBahsRedBlackTreeLibrary.Tree tree;
+
+    uint private constant EMPTY = 0;
+    uint256 public maxLength;
     uint256 private length;
 
     event LowestItem (
@@ -39,81 +45,92 @@ contract CappedSet {
     }
 
     mapping(address => bool) private isItemInserted;
-    mapping(uint256 => address) private index2Adrress; // index => address
-    mapping(uint256 => uint256) private index2Value; // index => value
-    mapping(address => uint256) private address2Value; // address => value // use to get value of address
-    mapping(address => uint256) private address2Index; // address => index // use to get index of address (delete)
+    mapping(address => uint256) private address2Value; // use to get value in fastest way
+    mapping(uint256 => address[]) private value2AddressArr;
+    mapping(address => uint256) private address2IndexInArr; // use to delete an address not have to loop array
     address private minAddress;
     uint256 private minValue;
-    uint256 private minIndex;
 
     function insert(address addr, uint256 value) public returns (address newLowestAddress, uint256 newLowestValue) {
+        require(value != EMPTY, "Value to insert cannot be zero");
         require(isItemInserted[addr] == false, "This address has been inserted. Use function update to update its value");
-        isItemInserted[addr] = true;
         
         if (length == 0) {
-            index2Adrress[0] = addr;
-            index2Value[0] = value;
-            address2Value[addr] = value;
-            address2Index[addr] = 0;
+            if (value2AddressArr[value].length == 0) {
+              tree.insert(value);
+            }
+            value2AddressArr[value].push(addr);
+            _insertAddress(addr, value, value2AddressArr[value].length - 1);
             minAddress = addr;
             minValue = value;
-            minIndex = 0;
-            length++;
             emit LowestItem(address(0), 0); //emit for testing
             emit Inserted(addr, value);
             return (address(0), 0);
         }
 
         if (length < maxLength) {
-            if (value < minValue) {
-                minAddress = addr;
-                minValue = value;
-                minIndex = length;
+            if (value2AddressArr[value].length == 0) {
+              tree.insert(value);
             }
-            index2Adrress[length] = addr;
-            index2Value[length] = value;
-            address2Value[addr] = value;
-            address2Index[addr] = length;
-            length++;
+            value2AddressArr[value].push(addr);
+            _insertAddress(addr, value, value2AddressArr[value].length - 1);
+
+            if (value < minValue) {
+              minValue = value;
+              minAddress = addr;
+            }
+
             emit LowestItem(minAddress, minValue); //emit for testing
             emit Inserted(addr, value);
             return (minAddress, minValue);
         }
 
-        _removeIndex(minIndex);
-        index2Adrress[length] = addr;
-        index2Value[length] = value;
-        address2Value[addr] = value;
-        address2Index[addr] = length;
-        length++;
-        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
+        uint256 minAddressLength = value2AddressArr[minValue].length;
+        if (minAddressLength > 1) { //if multiple min addresses, then delete first address
+          address addrDelete = value2AddressArr[minValue][0];
+          _deleteAddress(addrDelete);
+          value2AddressArr[minValue][0] = value2AddressArr[minValue][minAddressLength - 1];
+          value2AddressArr[minValue].pop();
+          minAddress = value2AddressArr[value][0];
+
+          // then insert address, value
+          if (value2AddressArr[value].length == 0) {
+            tree.insert(value);
+          }
+          value2AddressArr[value].push(addr);
+          _insertAddress(addr, value, value2AddressArr[value].length - 1);
+
+          if (value < minValue) {
+            minValue = value;
+            minAddress = addr;
+          }
+        } else { // delete tree, then find new min value
+          tree.remove(minValue);
+          address addrDelete = value2AddressArr[minValue][0];
+          _deleteAddress(addrDelete);
+          delete value2AddressArr[minValue];
+
+          if (value2AddressArr[value].length == 0) {
+            tree.insert(value);
+          }
+          value2AddressArr[value].push(addr);
+          _insertAddress(addr, value, value2AddressArr[value].length - 1);
+
+          minValue = tree.first();
+          minAddress = value2AddressArr[minValue][0];
+        }
+
         emit LowestItem(minAddress, minValue); //emit for testing
         emit Inserted(addr, value);
         return (minAddress, minValue);
     }
 
     function update(address addr, uint256 newVal) public returns (address newLowestAddress, uint256 newLowestValue) {
+      require(newVal != EMPTY, "Value to update cannot be zero");
       require(isItemInserted[addr] == true, "This address has not been inserted. Use function insert to insert its value first");
       uint256 oldValue = address2Value[addr];
-      
-      if (addr == minAddress && oldValue == minValue && newVal > minValue) { // update the minimum element
-        address2Value[addr] = newVal;
-        uint256 index = address2Index[addr];
-        index2Value[index] = newVal;
-        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
-        emit LowestItem(minAddress, minValue); //emit for testing
-        emit Updated(addr, oldValue, newVal);
-        return (minAddress, minValue);
-      }
-
-      if (newVal < minValue) {
-        minAddress = addr;
-        minValue = newVal;
-        minIndex = address2Index[addr];
-      }
-
-      address2Value[addr] = newVal;
+      remove(addr);
+      insert(addr, newVal);
 
       emit LowestItem(minAddress, minValue); //emit for testing
       emit Updated(addr, oldValue, newVal);
@@ -122,12 +139,27 @@ contract CappedSet {
 
     function remove(address addr) public returns (address newLowestAddress, uint256 newLowestValue) {
       require(isItemInserted[addr] == true, "This address has not been inserted");
-      
-      uint index = address2Index[addr];
-      _removeIndex(index);
 
-      if (addr == minAddress) { // if the address is minimum, then find new min value
-        (minAddress, minValue, minIndex) = _findMinAddressAndMinValue();
+      uint256 valueOfAddr = address2Value[addr];
+      if (value2AddressArr[valueOfAddr].length == 1) {
+        delete value2AddressArr[valueOfAddr];
+        _deleteAddress(addr);
+
+        if (valueOfAddr == minValue) { // find new minValue
+          tree.remove(valueOfAddr);
+          minValue = tree.first();
+          minAddress = value2AddressArr[minValue][0];
+        }
+      } else {
+        uint256 index = address2IndexInArr[addr];
+        uint256 arrLength = value2AddressArr[valueOfAddr].length;
+        value2AddressArr[valueOfAddr][index] = value2AddressArr[valueOfAddr][arrLength - 1]; //swap with last element
+        value2AddressArr[valueOfAddr].pop();
+        _deleteAddress(addr);
+
+        if (minAddress == addr) {
+          minAddress = value2AddressArr[valueOfAddr][0];
+        }
       }
 
       emit LowestItem(minAddress, minValue); //emit for testing
@@ -140,46 +172,18 @@ contract CappedSet {
       return address2Value[addr];
     }
 
-    function _removeIndex(uint256 index) private {
-      address addr = index2Adrress[index];
-      // delete addr
-      delete address2Value[addr];
-      delete address2Index[addr];
-      isItemInserted[addr] = false;
-
-      for (uint256 i = index; i < length - 1; i++) { // move elements
-        address nextAddress = index2Adrress[i + 1];
-        uint256 nextValue = index2Value[i + 1];
-        index2Adrress[i] = nextAddress;
-        index2Value[i] = nextValue;
-        address2Index[nextAddress] = i;
-      }
-
-      length--;
+    function _insertAddress(address addr, uint256 value, uint256 indexInArr) private {
+      isItemInserted[addr] = true;
+      address2Value[addr] = value;
+      address2IndexInArr[addr] = indexInArr;
+      length++;
     }
 
-    function _findMinAddressAndMinValue() private view returns (address, uint256, uint256) { // return (minAddress, minValue, minIndex)
-        if (length == 0) {
-          return (address(0), 0, 0);
-        }
-
-        if (length == 1) {
-          return (index2Adrress[0], index2Value[0], 0);
-        }
-        
-        address tempMinAddress = index2Adrress[0];
-        uint256 tempMinValue = index2Value[0];
-        uint256 tempMinIndex = 0;
-
-        for (uint256 i = 1; i < length; i++) {
-          if (index2Value[i] < tempMinValue) {
-            tempMinAddress = index2Adrress[i];
-            tempMinValue = index2Value[i];
-            tempMinIndex = i;
-          }
-        }
-
-        return (tempMinAddress, tempMinValue, tempMinIndex);
+    function _deleteAddress(address addr) private {
+      isItemInserted[addr] = false;
+      delete address2Value[addr];
+      delete address2IndexInArr[addr];
+      length--;
     }
 
 }
