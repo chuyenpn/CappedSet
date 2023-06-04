@@ -6,9 +6,9 @@ v0.2: first simple solution using hashmap with index as address - value pair; fi
 \
 Gas Image
 
-![Gas Image v0.2]([URL or file path](https://raw.githubusercontent.com/chuyenpn/CappedSet/master/docs/test-result-v0.2.png))
-
-
+<p>
+    <img src="https://raw.githubusercontent.com/chuyenpn/CappedSet/master/docs/test-result-v0.2.png" width="906" height="356" />
+</p>
 
 v0.3: Recommended version using Red Black Tree Library from [Red-Black Binary Search Tree Library](https://github.com/bokkypoobah/BokkyPooBahsRedBlackTreeLibrary)\
       Much better gas usage with maximum gas ~ 400,000 (0.0011 BNB per transaction) when Capped Number = 1000 \
@@ -16,7 +16,9 @@ v0.3: Recommended version using Red Black Tree Library from [Red-Black Binary Se
 \
 Gas Image
 
-![Gas Image v0.3]([URL or file path](https://raw.githubusercontent.com/chuyenpn/CappedSet/master/docs/test-result-v0.3-red-black-tree.png))
+<p>
+    <img src="https://raw.githubusercontent.com/chuyenpn/CappedSet/master/docs/test-result-v0.3-red-black-tree.png" width="906" height="356" />
+</p>
 
 
 Try running some of the following tasks:
