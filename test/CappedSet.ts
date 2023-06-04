@@ -54,7 +54,7 @@ describe("CappedSet", function () {
       await expect(deployed.cappedSet.insert(address, value2)).to.be.revertedWith("This address has been inserted. Use function update to update its value");
     });
 
-    it("Insert 3rd element: Should return lowest address and lowest value", async function () {
+    it("Insert up to capped element: Should return lowest address and lowest value", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -184,7 +184,7 @@ describe("CappedSet", function () {
       expect(value).to.equal(valueUpdate);
     });
 
-    it("Update element with existing address which is not minimum element: Should return lowest address and lowest value after update", async function () {
+    it("Insert up to capped element, then update element with existing address which is not minimum element: Should return lowest address and lowest value after update", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -235,7 +235,7 @@ describe("CappedSet", function () {
       
     });
 
-    it("Update element with existing address which is minimum element: Should return lowest address and lowest value after update", async function () {
+    it("Insert up to capped element, then update element with existing address which is minimum element: Should return lowest address and lowest value after update", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -319,7 +319,7 @@ describe("CappedSet", function () {
       await expect(deployed.cappedSet.remove(address2)).to.be.revertedWith("This address has not been inserted");
     });
 
-    it("Delete element with existing address: Should delete the address (call getValue function will revert with a message)", async function () {
+    it("Insert up to capped element, then delete element with existing address: Should delete the address (call getValue function will revert with a message)", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
@@ -342,7 +342,7 @@ describe("CappedSet", function () {
       await expect(deployed.cappedSet.getValue(addressDelete)).to.be.revertedWith("Not found this address");
     });
 
-    it("Delete element with existing address: Should return lowest address and lowest value after delete", async function () {
+    it("Insert up to capped element, then delete element with existing address: Should return lowest address and lowest value after delete", async function () {
       const deployed: CappedSetDeploy = await deploy();
       const addressArr: string[] = [];
       const valueArr: number[] = [];
